@@ -1,6 +1,12 @@
-use std::collections::{HashMap, LinkedList};
+use std::{
+    collections::{HashMap, LinkedList},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Mutex,
+    },
+};
 
-use super::buffer_pool_manager::FrameId;
+use crate::common::config::FrameId;
 
 #[derive(Debug)]
 pub struct LRUKNode {
@@ -8,7 +14,7 @@ pub struct LRUKNode {
     /// stored in front.
     // Remove maybe_unused if you start using them. Feel free to change the member variables as you
     // want.
-    history: LinkedList<u64>,
+    history: LinkedList<usize>,
     k: usize,
     frame_id: FrameId,
     is_evictable: bool,
@@ -27,9 +33,9 @@ pub struct LRUKNode {
 pub struct LRUKReplacer {
     // TODO(student): implement me! You can replace these member variables as you like.
     // Remove maybe_unused if you start using them.
-    node_store: HashMap<FrameId, LRUKNode>,
-    current_timestamp: u64,
-    current_size: usize,
+    node_store: Mutex<HashMap<FrameId, LRUKNode>>,
+    current_timestamp: AtomicUsize,
+    current_size: AtomicUsize,
     replacer_size: usize,
     k: usize,
 }
@@ -70,9 +76,7 @@ impl LRUKReplacer {
     /// timestamp. Create a new entry for access history if frame id has not
     /// been seen before.
     ///
-    /// If frame id is invalid (ie. larger than replacer_size_), throw an
-    /// exception. You can also use BUSTUB_ASSERT to abort the process if
-    /// frame id is invalid.
+    /// If frame id is invalid (ie. larger than replacer_size_), panic.
     ///
     /// @param frame_id id of frame that received a new access.
     /// @param access_type type of access that was received. This parameter is
@@ -91,7 +95,7 @@ impl LRUKReplacer {
     /// then size should decrement. If a frame was previously non-evictable
     /// and is to be set to evictable, then size should increment.
     ///
-    /// If frame id is invalid, throw an exception or abort the process.
+    /// If frame id is invalid, panic.
     ///
     /// For other scenarios, this function should terminate without modifying
     /// anything.
@@ -112,8 +116,7 @@ impl LRUKReplacer {
     /// the frame with largest backward k-distance. This function removes
     /// specified frame id, no matter what its backward k-distance is.
     ///
-    /// If Remove is called on a non-evictable frame, throw an exception or
-    /// abort the process.
+    /// If Remove is called on a non-evictable frame, panic.
     ///
     /// If specified frame is not found, directly return from this function.
     ///
@@ -137,7 +140,7 @@ mod tests {
     use super::LRUKReplacer;
 
     #[test]
-    pub fn test_lru_k_cmu_sample() {
+    pub fn test_lru_k_replacer_sample() {
         let mut lru_replacer = LRUKReplacer::new(7, 2);
 
         // Scenario: add six elements to the replacer. We have [1,2,3,4,5]. Frame 6 is

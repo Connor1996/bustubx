@@ -8,14 +8,12 @@ use std::{
 
 use super::lru_k_replacer::LRUKReplacer;
 use crate::{
-    common::config::BUSTUBX_PAGE_SIZE,
+    common::config::{PageId, BUSTUBX_PAGE_SIZE},
     storage::{
         disk_manager::DiskManager,
         page::{Page, PageId},
     },
 };
-
-pub type FrameId = u32;
 
 /// BufferPoolManager reads disk pages to and from its internal buffer pool.
 pub struct BufferPoolManager {
@@ -245,7 +243,7 @@ mod tests {
         let uniform_dist = Uniform::from(std::i8::MIN..=std::i8::MAX);
 
         let disk_manager = DiskManager::new(db_name);
-        let mut bpm = BufferPoolManager::new(buffer_pool_size, disk_manager, k, None); 
+        let mut bpm = BufferPoolManager::new(buffer_pool_size, disk_manager, k, None);
 
         let mut page_id_temp: PageId = 0; // PageId should be the type your system uses for page IDs
         let page0 = bpm.new_page(&mut page_id_temp);
