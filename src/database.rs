@@ -4,7 +4,7 @@ use tracing::span;
 
 use crate::{
     binder::{Binder, BinderContext},
-    buffer::buffer_pool::BufferPoolManager,
+    buffer::buffer_pool_manager::BufferPoolManager,
     catalog::catalog::Catalog,
     common::{config::TABLE_HEAP_BUFFER_POOL_SIZE, util::print_tuples},
     execution::{ExecutionContext, ExecutionEngine},

@@ -1,5 +1,5 @@
 use crate::{
-    buffer::buffer_pool::BufferPoolManager,
+    buffer::buffer_pool_manager::BufferPoolManager,
     common::{config::INVALID_PAGE_ID, rid::Rid},
 };
 
@@ -210,7 +210,7 @@ mod tests {
     use std::{fs::remove_file, sync::Arc};
 
     use crate::{
-        buffer::buffer_pool::BufferPoolManager,
+        buffer::buffer_pool_manager::BufferPoolManager,
         storage::{disk_manager, table_heap::TableHeap, tuple::Tuple},
     };
 

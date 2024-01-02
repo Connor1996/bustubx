@@ -1,4 +1,5 @@
 pub mod disk_manager;
+pub mod disk_scheduler;
 pub mod index;
 pub mod index_page;
 pub mod page;
