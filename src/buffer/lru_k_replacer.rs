@@ -8,6 +8,12 @@ use std::{
 
 use crate::common::config::FrameId;
 
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum Distance {
+    Num(usize),
+    Inf(usize),
+}
+
 #[derive(Debug)]
 pub struct LRUKNode {
     /// History of last seen K timestamps of this page. Least recent timestamp
@@ -18,6 +24,26 @@ pub struct LRUKNode {
     k: usize,
     frame_id: FrameId,
     is_evictable: bool,
+}
+
+impl LRUKNode {
+    pub fn new(frame_id: FrameId, k: usize) -> Self {
+        Self {
+            history: LinkedList::new(),
+            k,
+            frame_id,
+            is_evictable: true,
+        }
+    }
+
+    fn backward_k_distance(&self) -> Distance {
+        if self.history.len() < self.k {
+            // make it ordered in descending order
+            // so the max will be the inf one with earliest timestamp
+            return Distance::Inf(usize::MAX - self.history.front().unwrap());
+        }
+        Distance::Num(self.history.back().unwrap() - self.history.front().unwrap())
+    }
 }
 
 /// LRUKReplacer implements the LRU-k replacement policy.
@@ -47,7 +73,13 @@ impl LRUKReplacer {
     /// @param num_frames the maximum number of frames the LRUReplacer will be
     /// required to store
     pub fn new(num_frames: usize, k: usize) -> Self {
-        unimplemented!()
+        Self {
+            node_store: Mutex::new(HashMap::new()),
+            current_timestamp: AtomicUsize::new(0),
+            current_size: AtomicUsize::new(0),
+            replacer_size: num_frames,
+            k,
+        }
     }
 
     /// TODO(P1): Add implementation
@@ -67,7 +99,24 @@ impl LRUKReplacer {
     /// @return true if a frame is evicted successfully, false if no frames can
     /// be evicted.
     pub fn evict(&mut self) -> Option<FrameId> {
-        unimplemented!()
+        let mut node_store = self.node_store.lock().unwrap();
+        let mut max_frame_id = None;
+        let mut max_backward_k_distance = Distance::Num(0);
+        for (frame_id, node) in node_store.iter() {
+            if !node.is_evictable {
+                continue;
+            }
+            let backward_k_distance = node.backward_k_distance();
+            if backward_k_distance > max_backward_k_distance {
+                max_backward_k_distance = backward_k_distance;
+                max_frame_id = Some(*frame_id);
+            }
+        }
+        if let Some(id) = max_frame_id {
+            node_store.remove(&id);
+            self.current_size.fetch_sub(1, Ordering::SeqCst);
+        }
+        max_frame_id
     }
 
     /// TODO(P1): Add implementation
@@ -82,7 +131,22 @@ impl LRUKReplacer {
     /// @param access_type type of access that was received. This parameter is
     /// only needed for leaderboard tests.
     pub fn record_access(&mut self, frame_id: FrameId) {
-        unimplemented!()
+        let ts = self.current_timestamp.fetch_add(1, Ordering::SeqCst);
+        let mut node_store = self.node_store.lock().unwrap();
+        if let Some(node) = node_store.get_mut(&frame_id) {
+            node.history.push_back(ts);
+            if node.history.len() > self.k {
+                node.history.pop_front();
+            }
+        } else {
+            if self.current_size.load(Ordering::SeqCst) >= self.replacer_size {
+                panic!("Replacer is full");
+            }
+            let mut node = LRUKNode::new(frame_id, self.k);
+            node.history.push_back(ts);
+            node_store.insert(frame_id, node);
+            self.current_size.fetch_add(1, Ordering::SeqCst);
+        }
     }
 
     /// TODO(P1): Add implementation
@@ -103,7 +167,20 @@ impl LRUKReplacer {
     /// @param frame_id id of frame whose 'evictable' status will be modified
     /// @param set_evictable whether the given frame is evictable or not
     pub fn set_evictable(&mut self, frame_id: FrameId, set_evictable: bool) {
-        unimplemented!()
+        let mut node_store = self.node_store.lock().unwrap();
+        if let Some(node) = node_store.get_mut(&frame_id) {
+            if node.is_evictable == set_evictable {
+                return;
+            }
+            node.is_evictable = set_evictable;
+            if set_evictable {
+                self.current_size.fetch_add(1, Ordering::SeqCst);
+            } else {
+                self.current_size.fetch_sub(1, Ordering::SeqCst);
+            }
+        } else {
+            panic!("Invalid frame id");
+        }
     }
 
     /// TODO(P1): Add implementation
@@ -122,7 +199,14 @@ impl LRUKReplacer {
     ///
     /// @param frame_id id of frame to be removed
     pub fn remove(&mut self, frame_id: FrameId) {
-        unimplemented!()
+        let mut node_store = self.node_store.lock().unwrap();
+        if let Some(node) = node_store.get_mut(&frame_id) {
+            if !node.is_evictable {
+                panic!("Frame is not evictable");
+            }
+            node_store.remove(&frame_id);
+            self.current_size.fetch_sub(1, Ordering::SeqCst);
+        }
     }
 
     /// TODO(P1): Add implementation
@@ -132,7 +216,7 @@ impl LRUKReplacer {
     ///
     /// @return size_t
     pub fn size(&self) -> usize {
-        unimplemented!()
+        self.current_size.load(Ordering::SeqCst)
     }
 }
 
