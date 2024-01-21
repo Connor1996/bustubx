@@ -1,19 +1,11 @@
-use std::{
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc, Mutex,
-    },
-    thread,
-};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 use super::lru_k_replacer::LRUKReplacer;
-use crate::{
-    common::config::{PageId, BUSTUB_PAGE_SIZE},
-    storage::{
-        disk_manager::DiskManager,
-        page::{Page, PageId},
-    },
-};
+use crate::common::config::{PageId, BUSTUB_PAGE_SIZE};
+use crate::storage::disk_manager::DiskManager;
+use crate::storage::page::{Page, PageId};
 
 /// BufferPoolManager reads disk pages to and from its internal buffer pool.
 pub struct BufferPoolManager {
@@ -23,15 +15,15 @@ pub struct BufferPoolManager {
     next_page_id: AtomicUsize,
 
     /// Array of buffer pool pages.
-    pages: Vec<Page>, // Assuming Page is a struct representing a page
+    pages: Vec<Page>,
     /// Pointer to the disk scheduler.
-    disk_scheduler: Arc<DiskScheduler>, // Assuming DiskScheduler is a struct
+    disk_scheduler: Arc<DiskScheduler>,
     /// Pointer to the log manager. Please ignore this for P1.
-    log_manager: Option<Arc<LogManager>>, // Optional for enabling/disabling logging
+    log_manager: Option<Arc<LogManager>>,
     /// Page table for keeping track of buffer pool pages.
     page_table: Mutex<HashMap<PageId, FrameId>>,
     /// Replacer to find unpinned pages for replacement.
-    replacer: LRUKReplacer, // Assuming LRUKReplacer is a struct
+    replacer: LRUKReplacer,
     /// List of free frames that don't have any pages on them.
     free_list: Mutex<Vec<FrameId>>,
 }
@@ -45,11 +37,20 @@ impl BufferPoolManager {
     /// logging). Please ignore this for P1.
     pub fn new(
         pool_size: usize,
-        disk_manager: Arc<DiskManager>,
+        disk_manager: DiskManager,
         replacer_k: usize, // Assuming the default is defined elsewhere
         log_manager: Option<Arc<LogManager>>,
     ) -> BufferPoolManager {
-        unimplemented!()
+        Self {
+            pool_size,
+            next_page_id: AtomicUsize::new(0),
+            pages: Vec::with_capacity(pool_size),
+            disk_scheduler: Arc::new(DiskScheduler::new(disk_manager)),
+            log_manager,
+            page_table: Mutex::new(HashMap::new()),
+            replacer: LRUKReplacer::new(replacer_k),
+            free_list: Mutex::new(Vec::with_capacity(pool_size)),
+        }
     }
 
     /// @brief Return the size (number of frames) of the buffer pool.
@@ -222,14 +223,16 @@ impl BufferPoolManager {
 }
 
 mod tests {
-    use std::{fs, fs::remove_file, sync::Arc};
+    use std::fs;
+    use std::fs::remove_file;
+    use std::sync::Arc;
 
-    use rand::{distributions::Uniform, Rng};
+    use rand::distributions::Uniform;
+    use rand::Rng;
 
     use super::*;
-    use crate::{
-        buffer::buffer_pool_manager::BufferPoolManager, storage::disk_manager::DiskManager,
-    };
+    use crate::buffer::buffer_pool_manager::BufferPoolManager;
+    use crate::storage::disk_manager::DiskManager;
 
     const BUSTUB_PAGE_SIZE: usize = 4096; // Placeholder for actual page size
 
