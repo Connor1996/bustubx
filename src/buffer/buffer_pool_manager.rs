@@ -1,10 +1,12 @@
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::thread;
+
+use futures::channel::oneshot;
 
 use super::lru_k_replacer::LRUKReplacer;
-use crate::common::config::{PageId, BUSTUB_PAGE_SIZE};
-use crate::storage::disk_manager::DiskManager;
+use crate::common::config::{FrameId, PageId, BUSTUB_PAGE_SIZE, LRUK_REPLACER_K};
+use crate::storage::disk::{DiskManager, DiskRequest, DiskScheduler};
 use crate::storage::page::{Page, PageId};
 
 /// BufferPoolManager reads disk pages to and from its internal buffer pool.

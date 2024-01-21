@@ -1,28 +1,27 @@
-use std::{
-    sync::{Arc, Mutex},
-    thread,
-};
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 use futures::channel::oneshot;
 
-use super::{disk_manager::DiskManager, page::PageId};
+use crate::storage::disk::DiskManager;
+use crate::storage::page::{Page, PageId};
 
 /// @brief Represents a Write or Read request for the DiskManager to execute.
-struct DiskRequest {
-    /// Flag indicating whether the request is a write or a read.
-    is_write: bool,
-
-    ///  Pointer to the start of the memory location where a page is either:
-    ///   1. being read into from disk (on a read).
-    ///   2. being written out to disk (on a write).
-    data: *mut char, // Consider using a safer type in Rust
-
-    /// ID of the page being read from / written to disk.
-    page_id: PageId,
-
-    /// Callback used to signal to the request issuer when the request has been
-    /// completed.
-    callback: oneshot::Sender<bool>,
+pub enum DiskRequest {
+    Read {
+        /// The page being read from disk.
+        page: Page,
+        /// Callback used to signal to the request issuer when the request has
+        /// been completed.
+        callback: oneshot::Sender<()>,
+    },
+    Write {
+        /// The page being written out ot disk.
+        page: Page,
+        /// Callback used to signal to the request issuer when the request has
+        /// been completed.
+        callback: oneshot::Sender<()>,
+    },
 }
 
 /// @brief The DiskScheduler schedules disk read and write operations.
@@ -32,23 +31,24 @@ struct DiskRequest {
 /// thread that processes the scheduled requests using the disk manager. The
 /// background thread is created in the DiskScheduler constructor and joined in
 /// its destructor.
-struct DiskScheduler {
-    /// Pointer to the disk manager.
-    disk_manager: Arc<Mutex<DiskManager>>,
-
+pub struct DiskScheduler {
     /// A shared queue to concurrently schedule and process requests. When the
     /// DiskScheduler's destructor is called, `None` is put into the queue
     /// to signal to the background thread to stop execution.
-    request_queue: crossbeam::channel::Sender<Option<DiskRequest>>,
+    request_queue: std::sync::mpsc::Sender<Option<DiskRequest>>,
 
     /// The background thread responsible for issuing scheduled requests to the
     /// disk manager.
-    background_thread: Option<thread::JoinHandle<()>>,
+    background_thread: thread::JoinHandle<()>,
 }
 
 impl DiskScheduler {
-    pub fn new(disk_manager: Arc<Mutex<DiskManager>>) -> Self {
-        unimplemented!()
+    pub fn new(disk_manager: Arc<DiskManager>) -> Self {
+        let (tx, rx) = std::sync::mpsc::channel();
+        Self {
+            request_queue: tx,
+            background_thread: thread::spawn(move || Self::start_worker_thread(rx, disk_manager)),
+        }
     }
 
     /// TODO(P1): Add implementation
@@ -69,7 +69,10 @@ impl DiskScheduler {
     /// exists, i.e., this function should not return until ~DiskScheduler()
     /// is called. At that point you need to make sure that the function does
     /// return.
-    fn start_worker_thread(&mut self) {
+    fn start_worker_thread(
+        rx: std::sync::mpsc::Receiver<Option<DiskRequest>>,
+        disk_manager: Arc<DiskManager>,
+    ) {
         unimplemented!()
     }
 
@@ -78,7 +81,15 @@ impl DiskScheduler {
     /// cases can use your promise implementation.
     ///
     /// @return std::promise<bool>
-    fn create_promise() -> oneshot::Sender<bool> {
+    fn create_promise() -> oneshot::Sender<()> {
         unimplemented!()
+    }
+}
+
+impl Drop for DiskScheduler {
+    fn drop(&mut self) {
+        // Put a `std::nullopt` in the queue to signal to exit the loop
+        self.request_queue.send(None).unwrap();
+        self.background_thread.join().unwrap();
     }
 }

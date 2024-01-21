@@ -12,7 +12,7 @@ use crate::common::config::{PageId, BUSTUB_PAGE_SIZE};
 /// database. It performs the reading and writing of pages to and from disk,
 /// providing a logical file layer within the context of a database management
 /// system.
-struct DiskManager {
+pub struct DiskManager {
     // Stream to write log file
     log_io: File,
     log_name: String,
@@ -27,7 +27,7 @@ struct DiskManager {
     // Indicates if the in-memory content has not been flushed yet
     flush_log: bool,
     // Future for non-blocking flushes
-    flush_log_f: Option<Box<dyn Future<Output = ()>>>,
+    flush_log_f: Option<Box<dyn Future<Output = ()> + Send + Sync>>,
 }
 
 impl DiskManager {

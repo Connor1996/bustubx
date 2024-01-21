@@ -4,6 +4,7 @@ pub const INVALID_PAGE_ID: PageId = std::u32::MAX;
 
 // table heap对应的缓冲池的大小（页）
 pub const TABLE_HEAP_BUFFER_POOL_SIZE: usize = 100;
+pub const LRUK_REPLACER_K: usize = 10; // lookback window for lru-k replacer
 
 pub type FrameId = u32;
 pub type PageId = u32;

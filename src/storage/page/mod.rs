@@ -1,2 +1,4 @@
-pub mod page;
-pub mod page_guard;
+mod page;
+mod page_guard;
+
+pub use page::Page;
