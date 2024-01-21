@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::atomic::AtomicU32};
 
+use super::schema::Schema;
 use crate::{
     buffer::buffer_pool_manager::BufferPoolManager,
     common::config::TABLE_HEAP_BUFFER_POOL_SIZE,
@@ -8,8 +9,6 @@ use crate::{
         table_heap::TableHeap,
     },
 };
-
-use super::schema::Schema;
 
 pub type TableOid = u32;
 pub type IndexOid = u32;
@@ -54,7 +53,7 @@ impl Catalog {
             indexes: HashMap::new(),
             index_names: HashMap::new(),
             next_index_oid: AtomicU32::new(0),
-            buffer_pool_manager: buffer_pool_manager,
+            buffer_pool_manager,
         }
     }
 

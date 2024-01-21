@@ -4,7 +4,7 @@ use super::{page::PageId, tuple::Tuple};
 use crate::{
     catalog::schema::Schema,
     common::{
-        config::{BUSTUBX_PAGE_SIZE, INVALID_PAGE_ID},
+        config::{BUSTUB_PAGE_SIZE, INVALID_PAGE_ID},
         rid::Rid,
     },
 };
@@ -20,7 +20,7 @@ pub enum BPlusTreePage {
     Leaf(BPlusTreeLeafPage),
 }
 impl BPlusTreePage {
-    pub fn from_bytes(raw: &[u8; BUSTUBX_PAGE_SIZE], key_schema: &Schema) -> Self {
+    pub fn from_bytes(raw: &[u8; BUSTUB_PAGE_SIZE], key_schema: &Schema) -> Self {
         let page_type = BPlusTreePageType::from_bytes(&raw[0..4].try_into().unwrap());
         return match page_type {
             BPlusTreePageType::InternalPage => {
@@ -32,7 +32,7 @@ impl BPlusTreePage {
             BPlusTreePageType::InvalidPage => panic!("Invalid b+ tree page type"),
         };
     }
-    pub fn to_bytes(&self) -> [u8; BUSTUBX_PAGE_SIZE] {
+    pub fn to_bytes(&self) -> [u8; BUSTUB_PAGE_SIZE] {
         match self {
             Self::Internal(page) => page.to_bytes(),
             Self::Leaf(page) => page.to_bytes(),
@@ -100,17 +100,15 @@ impl BPlusTreePageType {
 pub type InternalKV = (Tuple, PageId);
 pub type LeafKV = (Tuple, Rid);
 
-/**
- * Internal page format (keys are stored in increasing order):
- *  --------------------------------------------------------------------------
- * | HEADER | KEY(1)+PAGE_ID(1) | KEY(2)+PAGE_ID(2) | ... | KEY(n)+PAGE_ID(n) |
- *  --------------------------------------------------------------------------
- *
- * Header format (size in byte, 12 bytes in total):
- * ----------------------------------------------------------------------------
- * | PageType (4) | CurrentSize (4) | MaxSize (4) |
- * ----------------------------------------------------------------------------
- */
+/// Internal page format (keys are stored in increasing order):
+///  --------------------------------------------------------------------------
+/// | HEADER | KEY(1)+PAGE_ID(1) | KEY(2)+PAGE_ID(2) | ... | KEY(n)+PAGE_ID(n) |
+///  --------------------------------------------------------------------------
+///
+/// Header format (size in byte, 12 bytes in total):
+/// ----------------------------------------------------------------------------
+/// | PageType (4) | CurrentSize (4) | MaxSize (4) |
+/// ----------------------------------------------------------------------------
 #[derive(Debug, Clone)]
 pub struct BPlusTreeInternalPage {
     pub page_type: BPlusTreePageType,
@@ -323,7 +321,7 @@ impl BPlusTreeInternalPage {
         }
     }
 
-    pub fn from_bytes(raw: &[u8; BUSTUBX_PAGE_SIZE], key_schema: &Schema) -> Self {
+    pub fn from_bytes(raw: &[u8; BUSTUB_PAGE_SIZE], key_schema: &Schema) -> Self {
         let page_type = BPlusTreePageType::from_bytes(&raw[0..4].try_into().unwrap());
         let current_size = u32::from_be_bytes(raw[4..8].try_into().unwrap());
         let max_size = u32::from_be_bytes(raw[8..12].try_into().unwrap());
@@ -346,13 +344,13 @@ impl BPlusTreeInternalPage {
         }
     }
 
-    pub fn to_bytes(&self) -> [u8; BUSTUBX_PAGE_SIZE] {
-        let mut buf = [0; BUSTUBX_PAGE_SIZE];
+    pub fn to_bytes(&self) -> [u8; BUSTUB_PAGE_SIZE] {
+        let mut buf = [0; BUSTUB_PAGE_SIZE];
         buf[0..4].copy_from_slice(&self.page_type.to_bytes());
         buf[4..8].copy_from_slice(&self.current_size.to_be_bytes());
         buf[8..12].copy_from_slice(&self.max_size.to_be_bytes());
         if self.current_size == 0 {
-            buf[12..BUSTUBX_PAGE_SIZE].fill(0);
+            buf[12..BUSTUB_PAGE_SIZE].fill(0);
         } else {
             let key_size = self.array[0].0.data.len();
             let value_size = size_of::<PageId>();
@@ -393,17 +391,15 @@ impl BPlusTreeInternalPage {
     }
 }
 
-/**
- * Leaf page format (keys are stored in order):
- *  ----------------------------------------------------------------------
- * | HEADER | KEY(1) + RID(1) | KEY(2) + RID(2) | ... | KEY(n) + RID(n)
- *  ----------------------------------------------------------------------
- *
- *  Header format (size in byte, 16 bytes in total):
- *  ---------------------------------------------------------------------
- * | PageType (4) | CurrentSize (4) | MaxSize (4) | NextPageId (4)
- *  ---------------------------------------------------------------------
- */
+/// Leaf page format (keys are stored in order):
+///  ----------------------------------------------------------------------
+/// | HEADER | KEY(1) + RID(1) | KEY(2) + RID(2) | ... | KEY(n) + RID(n)
+///  ----------------------------------------------------------------------
+///
+///  Header format (size in byte, 16 bytes in total):
+///  ---------------------------------------------------------------------
+/// | PageType (4) | CurrentSize (4) | MaxSize (4) | NextPageId (4)
+///  ---------------------------------------------------------------------
 #[derive(Debug, Clone)]
 pub struct BPlusTreeLeafPage {
     pub page_type: BPlusTreePageType,
@@ -423,7 +419,7 @@ impl BPlusTreeLeafPage {
             array: Vec::with_capacity(max_size as usize),
         }
     }
-    pub fn from_bytes(raw: &[u8; BUSTUBX_PAGE_SIZE], key_schema: &Schema) -> Self {
+    pub fn from_bytes(raw: &[u8; BUSTUB_PAGE_SIZE], key_schema: &Schema) -> Self {
         let page_type = BPlusTreePageType::from_bytes(&raw[0..4].try_into().unwrap());
         let current_size = u32::from_be_bytes(raw[4..8].try_into().unwrap());
         let max_size = u32::from_be_bytes(raw[8..12].try_into().unwrap());
@@ -448,14 +444,14 @@ impl BPlusTreeLeafPage {
         }
     }
 
-    pub fn to_bytes(&self) -> [u8; BUSTUBX_PAGE_SIZE] {
-        let mut buf = [0; BUSTUBX_PAGE_SIZE];
+    pub fn to_bytes(&self) -> [u8; BUSTUB_PAGE_SIZE] {
+        let mut buf = [0; BUSTUB_PAGE_SIZE];
         buf[0..4].copy_from_slice(&self.page_type.to_bytes());
         buf[4..8].copy_from_slice(&self.current_size.to_be_bytes());
         buf[8..12].copy_from_slice(&self.max_size.to_be_bytes());
         buf[12..16].copy_from_slice(&self.next_page_id.to_be_bytes());
         if self.current_size == 0 {
-            buf[16..BUSTUBX_PAGE_SIZE].fill(0);
+            buf[16..BUSTUB_PAGE_SIZE].fill(0);
         } else {
             let key_size = self.array[0].0.data.len();
             let value_size = size_of::<Rid>();

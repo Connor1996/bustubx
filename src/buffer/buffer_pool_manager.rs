@@ -8,7 +8,7 @@ use std::{
 
 use super::lru_k_replacer::LRUKReplacer;
 use crate::{
-    common::config::{PageId, BUSTUBX_PAGE_SIZE},
+    common::config::{PageId, BUSTUB_PAGE_SIZE},
     storage::{
         disk_manager::DiskManager,
         page::{Page, PageId},

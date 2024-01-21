@@ -1,5 +1,3 @@
-use crate::storage::page::PageId;
-
 // Record Identifier
 #[derive(derive_new::new, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rid {

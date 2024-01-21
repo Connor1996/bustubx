@@ -1,30 +1,27 @@
-use crate::common::{config::BUSTUBX_PAGE_SIZE, rid::Rid};
-
 use super::{
     page::PageId,
     tuple::{Tuple, TupleMeta},
 };
+use crate::common::{config::BUSTUB_PAGE_SIZE, rid::Rid};
 
 pub const TABLE_PAGE_HEADER_SIZE: usize = 4 + 2 + 2;
 pub const TABLE_PAGE_TUPLE_INFO_SIZE: usize = 2 + 2 + (4 + 4 + 4);
 
-/**
- * Slotted page format:
- *  ---------------------------------------------------------
- *  | HEADER | ... FREE SPACE ... | ... INSERTED TUPLES ... |
- *  ---------------------------------------------------------
- *                                ^
- *                                free space pointer
- *
- *  Header format (size in bytes):
- *  ----------------------------------------------------------------------------
- *  | NextPageId (4)| NumTuples(2) | NumDeletedTuples(2) |
- *  ----------------------------------------------------------------------------
- *  ----------------------------------------------------------------
- *  | Tuple_1 offset+size (4) + TupleMeta(12) | Tuple_2 offset+size (4) + TupleMeta(12)  | ... |
- *  ----------------------------------------------------------------
- *
- */
+/// Slotted page format:
+///  ---------------------------------------------------------
+///  | HEADER | ... FREE SPACE ... | ... INSERTED TUPLES ... |
+///  ---------------------------------------------------------
+///                                ^
+///                                free space pointer
+///
+///  Header format (size in bytes):
+///  ----------------------------------------------------------------------------
+///  | NextPageId (4)| NumTuples(2) | NumDeletedTuples(2) |
+///  ----------------------------------------------------------------------------
+///  ----------------------------------------------------------------
+///  | Tuple_1 offset+size (4) + TupleMeta(12) | Tuple_2 offset+size (4) + TupleMeta(12)  | ... |
+///  ----------------------------------------------------------------
+///
 pub struct TablePage {
     pub next_page_id: PageId,
     pub num_tuples: u16,
@@ -33,7 +30,7 @@ pub struct TablePage {
     pub tuple_info: Vec<(u16, u16, TupleMeta)>,
     // 整个页原始数据
     // TODO 可以通过memmove、memcpy优化，参考bustub
-    pub data: [u8; BUSTUBX_PAGE_SIZE],
+    pub data: [u8; BUSTUB_PAGE_SIZE],
 }
 
 impl TablePage {
@@ -42,32 +39,35 @@ impl TablePage {
             next_page_id,
             num_tuples: 0,
             num_deleted_tuples: 0,
-            tuple_info: Vec::with_capacity(BUSTUBX_PAGE_SIZE / TABLE_PAGE_TUPLE_INFO_SIZE),
-            data: [0; BUSTUBX_PAGE_SIZE],
+            tuple_info: Vec::with_capacity(BUSTUB_PAGE_SIZE / TABLE_PAGE_TUPLE_INFO_SIZE),
+            data: [0; BUSTUB_PAGE_SIZE],
         }
     }
 
     // Get the offset for the next tuple insertion.
     pub fn get_next_tuple_offset(&self, meta: &TupleMeta, tuple: &Tuple) -> Option<u16> {
         // Get the ending offset of the current slot. If there are inserted tuples,
-        // get the offset of the previous inserted tuple; otherwise, set it to the size of the page.
+        // get the offset of the previous inserted tuple; otherwise, set it to the size
+        // of the page.
         let slot_end_offset = if self.num_tuples > 0 {
             self.tuple_info[self.num_tuples as usize - 1].0
         } else {
-            BUSTUBX_PAGE_SIZE as u16
+            BUSTUB_PAGE_SIZE as u16
         };
 
-        // Check if the current slot has enough space for the new tuple. Return None if not.
+        // Check if the current slot has enough space for the new tuple. Return None if
+        // not.
         if slot_end_offset < tuple.data.len() as u16 {
             return None;
         }
 
-        // Calculate the insertion offset for the new tuple by subtracting its data length
-        // from the ending offset of the current slot.
+        // Calculate the insertion offset for the new tuple by subtracting its data
+        // length from the ending offset of the current slot.
         let tuple_offset = slot_end_offset - tuple.data.len() as u16;
 
-        // Calculate the minimum valid tuple insertion offset, including the table page header size,
-        // the total size of each tuple info (existing tuple infos and newly added tuple info).
+        // Calculate the minimum valid tuple insertion offset, including the table page
+        // header size, the total size of each tuple info (existing tuple infos
+        // and newly added tuple info).
         let min_tuple_offset = TABLE_PAGE_HEADER_SIZE as u16
             + (self.num_tuples as u16 + 1) * TABLE_PAGE_TUPLE_INFO_SIZE as u16;
         if tuple_offset < min_tuple_offset {
@@ -95,7 +95,8 @@ impl TablePage {
             self.num_deleted_tuples += 1;
         }
 
-        // Copy the tuple's data into the appropriate position within the page's data buffer.
+        // Copy the tuple's data into the appropriate position within the page's data
+        // buffer.
         self.data[tuple_offset as usize..(tuple_offset + tuple.data.len() as u16) as usize]
             .copy_from_slice(&tuple.data);
         return Some(tuple_id);
@@ -192,8 +193,8 @@ impl TablePage {
         return table_page;
     }
 
-    pub fn to_bytes(&self) -> [u8; BUSTUBX_PAGE_SIZE] {
-        let mut bytes = [0; BUSTUBX_PAGE_SIZE];
+    pub fn to_bytes(&self) -> [u8; BUSTUB_PAGE_SIZE] {
+        let mut bytes = [0; BUSTUB_PAGE_SIZE];
         bytes[0..4].copy_from_slice(&self.next_page_id.to_be_bytes());
         bytes[4..6].copy_from_slice(&self.num_tuples.to_be_bytes());
         bytes[6..8].copy_from_slice(&self.num_deleted_tuples.to_be_bytes());
@@ -218,7 +219,7 @@ impl TablePage {
 
 mod tests {
     use crate::{
-        common::{config::BUSTUBX_PAGE_SIZE, rid::Rid},
+        common::{config::BUSTUB_PAGE_SIZE, rid::Rid},
         storage::tuple::Tuple,
     };
 
@@ -237,7 +238,7 @@ mod tests {
         assert_eq!(table_page.tuple_info.len(), 1);
         assert_eq!(
             table_page.tuple_info[tuple_id.unwrap() as usize].0,
-            BUSTUBX_PAGE_SIZE as u16 - 3
+            BUSTUB_PAGE_SIZE as u16 - 3
         );
         assert_eq!(table_page.tuple_info[tuple_id.unwrap() as usize].1, 3);
         assert_eq!(table_page.tuple_info[tuple_id.unwrap() as usize].2, meta);
@@ -249,7 +250,7 @@ mod tests {
         assert_eq!(table_page.tuple_info.len(), 2);
         assert_eq!(
             table_page.tuple_info[tuple_id.unwrap() as usize].0,
-            BUSTUBX_PAGE_SIZE as u16 - 3 - 3
+            BUSTUB_PAGE_SIZE as u16 - 3 - 3
         );
         assert_eq!(table_page.tuple_info[tuple_id.unwrap() as usize].1, 3);
         assert_eq!(table_page.tuple_info[tuple_id.unwrap() as usize].2, meta);
@@ -321,18 +322,15 @@ mod tests {
         assert_eq!(table_page2.num_tuples, 3);
         assert_eq!(table_page2.num_deleted_tuples, 0);
         assert_eq!(table_page2.tuple_info.len(), 3);
-        assert_eq!(table_page2.tuple_info[0].0, BUSTUBX_PAGE_SIZE as u16 - 3);
+        assert_eq!(table_page2.tuple_info[0].0, BUSTUB_PAGE_SIZE as u16 - 3);
         assert_eq!(table_page2.tuple_info[0].1, 3);
         assert_eq!(table_page2.tuple_info[0].2, meta);
-        assert_eq!(
-            table_page2.tuple_info[1].0,
-            BUSTUBX_PAGE_SIZE as u16 - 3 - 3
-        );
+        assert_eq!(table_page2.tuple_info[1].0, BUSTUB_PAGE_SIZE as u16 - 3 - 3);
         assert_eq!(table_page2.tuple_info[1].1, 3);
         assert_eq!(table_page2.tuple_info[1].2, meta);
         assert_eq!(
             table_page2.tuple_info[2].0,
-            BUSTUBX_PAGE_SIZE as u16 - 3 - 3 - 3
+            BUSTUB_PAGE_SIZE as u16 - 3 - 3 - 3
         );
         assert_eq!(table_page2.tuple_info[2].1, 3);
         assert_eq!(table_page2.tuple_info[2].2, meta);

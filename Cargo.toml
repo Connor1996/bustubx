@@ -19,4 +19,5 @@ futures = "0.3.30"
 crossbeam = "0.8.3"
 tempdir = "0.3.7"
 rand = "0.8.5"
+log = "0.4.20"
 

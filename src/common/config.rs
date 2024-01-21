@@ -1,5 +1,5 @@
 // 数据页的大小（字节）
-pub const BUSTUBX_PAGE_SIZE: usize = 4096;
+pub const BUSTUB_PAGE_SIZE: usize = 4096;
 pub const INVALID_PAGE_ID: PageId = std::u32::MAX;
 
 // table heap对应的缓冲池的大小（页）

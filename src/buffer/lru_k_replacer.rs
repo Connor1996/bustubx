@@ -224,7 +224,7 @@ mod tests {
     use super::LRUKReplacer;
 
     #[test]
-    pub fn test_lru_k_replacer_sample() {
+    pub fn test_sample() {
         let mut lru_replacer = LRUKReplacer::new(7, 2);
 
         // Scenario: add six elements to the replacer. We have [1,2,3,4,5]. Frame 6 is
