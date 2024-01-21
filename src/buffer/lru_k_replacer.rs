@@ -1,10 +1,6 @@
-use std::{
-    collections::{HashMap, LinkedList},
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Mutex,
-    },
-};
+use std::collections::{HashMap, LinkedList};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
 
 use crate::common::config::FrameId;
 

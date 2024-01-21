@@ -1,10 +1,8 @@
-use std::{
-    fs::{File, OpenOptions},
-    future::Future,
-    io::{Read, Seek, SeekFrom, Write},
-    path::Path,
-    sync::Mutex,
-};
+use std::fs::{File, OpenOptions};
+use std::future::Future;
+use std::io::{Read, Seek, SeekFrom, Write};
+use std::path::Path;
+use std::sync::Mutex;
 
 use log::debug;
 
