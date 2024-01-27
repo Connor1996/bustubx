@@ -1,6 +1,11 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
-use crate::common::config::{PageId, BUSTUB_PAGE_SIZE};
+use parking_lot::{
+    MappedMutexGuard, MappedRwLockReadGuard, MappedRwLockWriteGuard, MutexGuard, RwLock,
+    RwLockReadGuard, RwLockWriteGuard,
+};
+
+use crate::common::config::{Lsn, PageId, BUSTUB_PAGE_SIZE};
 
 const SIZE_PAGE_HEADER: usize = 8;
 const OFFSET_PAGE_START: usize = 0;
@@ -16,8 +21,6 @@ pub struct Page(Arc<RwLock<PageInner>>);
 #[derive(Debug)]
 struct PageInner {
     // The actual data that is stored within a page.
-    // Usually this should be stored as `char data_[BUSTUB_PAGE_SIZE]{};`. But to enable ASAN to
-    // detect page overflow, we store it as a ptr.
     data: [u8; BUSTUB_PAGE_SIZE],
 
     // The ID of this page.
@@ -42,48 +45,69 @@ impl Page {
         Page(Arc::new(RwLock::new(inner)))
     }
 
-    /// Zeroes out the data that is held within the page.
-    fn reset_memory(&mut self) {
-        for byte in &mut self.data {
-            *byte = 0;
-        }
+    pub fn reset(&self) {
+        let mut p = self.0.write();
+        p.data.fill(0);
+        p.page_id = None;
+        p.pin_count = 0;
+        p.is_dirty = false;
     }
 
     /// @return the actual data contained within this page
-    pub fn get_data(&self) -> &[u8] {
-        &self.data
+    pub fn get_data(&self) -> MappedRwLockReadGuard<'_, [u8; BUSTUB_PAGE_SIZE]> {
+        RwLockReadGuard::map(self.0.read(), |i| &i.data)
+    }
+    pub fn get_mut_data(&self) -> MappedRwLockWriteGuard<'_, [u8; BUSTUB_PAGE_SIZE]> {
+        RwLockWriteGuard::map(self.0.write(), |i| &mut i.data)
     }
 
-    pub fn set_page_id(&mut self, page_id: PageId) {
-        self.0.write().unwrap().page_id = Some(page_id);
+    pub fn set_page_id(&self, page_id: PageId) {
+        self.0.write().page_id = Some(page_id);
     }
 
     /// @return the page id of this page
     pub fn get_page_id(&self) -> Option<PageId> {
-        self.0.read().unwrap().page_id
+        self.0.read().page_id
     }
 
     /// @return the pin count of this page
     pub fn get_pin_count(&self) -> i32 {
-        self.0.read().unwrap().pin_count
+        self.0.read().pin_count
+    }
+
+    pub fn pin(&self) {
+        self.0.write().pin_count += 1;
+    }
+
+    pub fn unpin(&self) {
+        self.0.write().pin_count -= 1;
     }
 
     /// @return true if the page in memory has been modified from the page on
     /// disk, false otherwise
     pub fn is_dirty(&self) -> bool {
-        self.0.read().unwrap().is_dirty
+        self.0.read().is_dirty
+    }
+
+    pub fn set_dirty(&self, is_dirty: bool) {
+        self.0.write().is_dirty = is_dirty;
     }
 
     /// @return the page LSN.
     // This method assumes that LSN is stored at a certain offset in the data.
     pub fn get_lsn(&self) -> Lsn {
-        let lsn_bytes = &self.data[OFFSET_LSN..OFFSET_LSN + std::mem::size_of::<Lsn>()];
-        Lsn::from_ne_bytes(lsn_bytes.try_into().unwrap()) // Assuming Lsn is a defined type
+        let inner = self.0.read();
+        Lsn::from_ne_bytes(
+            inner.data[OFFSET_LSN..OFFSET_LSN + std::mem::size_of::<Lsn>()]
+                .try_into()
+                .unwrap(),
+        )
     }
 
     /// Sets the page LSN.
-    pub fn set_lsn(&mut self, lsn: Lsn) {
+    pub fn set_lsn(&self, lsn: Lsn) {
+        let mut inner = self.0.write();
         let lsn_bytes = lsn.to_ne_bytes();
-        self.data[OFFSET_LSN..OFFSET_LSN + std::mem::size_of::<Lsn>()].copy_from_slice(&lsn_bytes);
+        inner.data[OFFSET_LSN..OFFSET_LSN + std::mem::size_of::<Lsn>()].copy_from_slice(&lsn_bytes);
     }
 }

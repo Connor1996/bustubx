@@ -124,8 +124,6 @@ impl LRUKReplacer {
     /// If frame id is invalid (ie. larger than replacer_size_), panic.
     ///
     /// @param frame_id id of frame that received a new access.
-    /// @param access_type type of access that was received. This parameter is
-    /// only needed for leaderboard tests.
     pub fn record_access(&mut self, frame_id: FrameId) {
         let ts = self.current_timestamp.fetch_add(1, Ordering::SeqCst);
         let mut node_store = self.node_store.lock().unwrap();

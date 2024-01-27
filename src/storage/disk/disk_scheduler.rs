@@ -1,10 +1,9 @@
-use std::sync::{Arc, Mutex};
 use std::thread;
 
-use futures::channel::oneshot;
+use tokio::sync::oneshot;
 
 use crate::storage::disk::DiskManager;
-use crate::storage::page::{Page, PageId};
+use crate::storage::page::Page;
 
 /// @brief Represents a Write or Read request for the DiskManager to execute.
 pub enum DiskRequest {
@@ -39,15 +38,17 @@ pub struct DiskScheduler {
 
     /// The background thread responsible for issuing scheduled requests to the
     /// disk manager.
-    background_thread: thread::JoinHandle<()>,
+    background_thread: Option<thread::JoinHandle<()>>,
 }
 
 impl DiskScheduler {
-    pub fn new(disk_manager: Arc<DiskManager>) -> Self {
+    pub fn new(disk_manager: DiskManager) -> Self {
         let (tx, rx) = std::sync::mpsc::channel();
         Self {
             request_queue: tx,
-            background_thread: thread::spawn(move || Self::start_worker_thread(rx, disk_manager)),
+            background_thread: Some(thread::spawn(move || {
+                Self::start_worker_thread(rx, disk_manager)
+            })),
         }
     }
 
@@ -71,7 +72,7 @@ impl DiskScheduler {
     /// return.
     fn start_worker_thread(
         rx: std::sync::mpsc::Receiver<Option<DiskRequest>>,
-        disk_manager: Arc<DiskManager>,
+        mut disk_manager: DiskManager,
     ) {
         unimplemented!()
     }
@@ -90,6 +91,6 @@ impl Drop for DiskScheduler {
     fn drop(&mut self) {
         // Put a `std::nullopt` in the queue to signal to exit the loop
         self.request_queue.send(None).unwrap();
-        self.background_thread.join().unwrap();
+        self.background_thread.take().unwrap().join().unwrap();
     }
 }

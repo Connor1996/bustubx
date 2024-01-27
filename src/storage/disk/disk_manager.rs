@@ -32,7 +32,7 @@ pub struct DiskManager {
 
 impl DiskManager {
     /// Creates a new disk manager that writes to the specified database file.
-    fn new(db_file: &str) -> Self {
+    pub fn new(db_file: &str) -> Self {
         // Extract the base file name and add ".log" extension for the log file
         let file_name = Path::new(db_file);
         let log_name = file_name.with_extension("log");
@@ -78,13 +78,8 @@ impl DiskManager {
         }
     }
 
-    /// FOR TEST / LEADERBOARD ONLY, used by DiskManagerMemory
-    fn default() -> Self {
-        unimplemented!()
-    }
-
     /// Write a page to the database file.
-    fn write_page(&mut self, page_id: PageId, page_data: &[u8]) {
+    pub fn write_page(&mut self, page_id: PageId, page_data: &[u8]) {
         assert_eq!(page_data.len(), BUSTUB_PAGE_SIZE);
 
         let offset = page_id as usize * BUSTUB_PAGE_SIZE;
@@ -101,7 +96,7 @@ impl DiskManager {
     }
 
     /// Read a page from the database file.
-    fn read_page(&mut self, page_id: PageId, page_data: &mut [u8]) {
+    pub fn read_page(&mut self, page_id: PageId, page_data: &mut [u8]) {
         let offset = page_id as usize * BUSTUB_PAGE_SIZE;
 
         let mut db_io = self.db_io.lock().unwrap();
@@ -127,7 +122,7 @@ impl DiskManager {
 
     /// Write the contents of the log into disk file
     /// Only return when sync is done, and only perform sequence write
-    fn write_log(&mut self, log_data: &[u8]) {
+    pub fn write_log(&mut self, log_data: &[u8]) {
         if log_data.is_empty() {
             // no effect on num_flushes_ if log buffer is empty
             return;
@@ -156,7 +151,7 @@ impl DiskManager {
     /// Read the contents of the log into the given memory area
     /// Always read from the beginning and perform sequence read
     /// @return: false means already reach the end
-    fn read_log(&mut self, log_data: &mut [u8], offset: usize) -> bool {
+    pub fn read_log(&mut self, log_data: &mut [u8], offset: usize) -> bool {
         if offset >= self.log_io.metadata().unwrap().len() as usize {
             debug!("Read past end of log file");
             debug!("file size is {}", self.log_io.metadata().unwrap().len());
@@ -178,22 +173,22 @@ impl DiskManager {
     }
 
     /// Returns the number of disk flushes.
-    fn get_num_flushes(&self) -> i32 {
+    pub fn get_num_flushes(&self) -> i32 {
         self.num_flushes
     }
 
     /// Returns true if the in-memory content has not been flushed yet.
-    fn get_flush_state(&self) -> bool {
+    pub fn get_flush_state(&self) -> bool {
         self.flush_log
     }
 
     /// Returns the number of disk writes.
-    fn get_num_writes(&self) -> i32 {
+    pub fn get_num_writes(&self) -> i32 {
         self.num_writes
     }
 
     /// Sets the future which is used to check for non-blocking flushes.
-    fn set_flush_log_future(&mut self, f: Box<dyn Future<Output = ()>>) {
+    fn set_flush_log_future(&mut self, f: Box<dyn Future<Output = ()> + Send + Sync>) {
         self.flush_log_f = Some(f);
     }
 

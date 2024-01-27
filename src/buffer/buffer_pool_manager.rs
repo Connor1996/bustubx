@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use futures::channel::oneshot;
+use tokio::sync::oneshot;
 
 use super::lru_k_replacer::LRUKReplacer;
 use crate::common::config::{FrameId, PageId, BUSTUB_PAGE_SIZE, LRUK_REPLACER_K};
 use crate::storage::disk::{DiskManager, DiskRequest, DiskScheduler};
-use crate::storage::page::{Page, PageId};
+use crate::storage::page::{BasicPageGuard, Page, ReadPageGuard, WritePageGuard};
 
 /// BufferPoolManager reads disk pages to and from its internal buffer pool.
 pub struct BufferPoolManager {
@@ -19,7 +19,7 @@ pub struct BufferPoolManager {
     /// Array of buffer pool pages.
     pages: Vec<Page>,
     /// Pointer to the disk scheduler.
-    disk_scheduler: Arc<DiskScheduler>,
+    disk_scheduler: DiskScheduler,
     /// Pointer to the log manager. Please ignore this for P1.
     log_manager: Option<Arc<LogManager>>,
     /// Page table for keeping track of buffer pool pages.
@@ -40,18 +40,22 @@ impl BufferPoolManager {
     pub fn new(
         pool_size: usize,
         disk_manager: DiskManager,
-        replacer_k: usize, // Assuming the default is defined elsewhere
+        replacer_k: usize,
         log_manager: Option<Arc<LogManager>>,
     ) -> BufferPoolManager {
+        let mut free_list = Vec::with_capacity(pool_size);
+        for i in (0..pool_size).rev() {
+            free_list.push(i as FrameId);
+        }
         Self {
             pool_size,
             next_page_id: AtomicUsize::new(0),
-            pages: Vec::with_capacity(pool_size),
-            disk_scheduler: Arc::new(DiskScheduler::new(disk_manager)),
+            pages: (0..pool_size).map(|_| Page::new()).collect(),
+            disk_scheduler: DiskScheduler::new(disk_manager),
             log_manager,
             page_table: Mutex::new(HashMap::new()),
-            replacer: LRUKReplacer::new(replacer_k),
-            free_list: Mutex::new(Vec::with_capacity(pool_size)),
+            replacer: LRUKReplacer::new(replacer_k, LRUK_REPLACER_K),
+            free_list: Mutex::new(free_list),
         }
     }
 
@@ -68,7 +72,7 @@ impl BufferPoolManager {
     /// TODO(P1): Add implementation
     ///
     /// @brief Create a new page in the buffer pool. Set page_id to the new
-    /// page's id, or nullptr if all frames are currently in use and not
+    /// page's id, or none if all frames are currently in use and not
     /// evictable (in another word, pinned).
     ///
     /// You should pick the replacement frame from either the free list or the
@@ -82,11 +86,9 @@ impl BufferPoolManager {
     /// buffer pool manager "Unpin"s it. Also, remember to record the access
     /// history of the frame in the replacer for the lru-k algorithm to work.
     ///
-    /// @param[out] page_id id of created page
-    /// @return nullptr if no new pages could be created, otherwise pointer to
+    /// @return none if no new pages could be created, otherwise pointer to
     /// new page
-    pub fn new_page(&mut self, page_id: &mut Option<PageId>) -> Option<&Page> {
-        unimplemented!()
+    pub fn new_page(&mut self) -> Option<Page> {
     }
 
     /// TODO(P2): Add implementation
@@ -105,7 +107,7 @@ impl BufferPoolManager {
 
     /// TODO(P1): Add implementation
     ///
-    /// @brief Fetch the requested page from the buffer pool. Return nullptr if
+    /// @brief Fetch the requested page from the buffer pool. Return none if
     /// page_id needs to be fetched from the disk but all frames are
     /// currently in use and not evictable (in another word, pinned).
     ///
@@ -121,11 +123,9 @@ impl BufferPoolManager {
     /// of the frame like you did for NewPage().
     ///
     /// @param page_id id of page to be fetched
-    /// @param access_type type of access to the page, only needed for
-    /// leaderboard tests. @return nullptr if page_id cannot be fetched,
+    /// @return nullptr if page_id cannot be fetched,
     /// otherwise pointer to the requested page
-    pub fn fetch_page(&mut self, page_id: PageId, access_type: AccessType) -> Option<&Page> {
-        unimplemented!()
+    pub fn fetch_page(&mut self, page_id: PageId) -> Option<Page> {
     }
 
     /// TODO(P2): Add implementation
@@ -160,11 +160,9 @@ impl BufferPoolManager {
     ///
     /// @param page_id id of page to be unpinned
     /// @param is_dirty true if the page should be marked as dirty, false
-    /// otherwise @param access_type type of access to the page, only needed
-    /// for leaderboard tests. @return false if the page is not in the page
+    /// otherwise @return false if the page is not in the page
     /// table or its pin count is <= 0 before this call, true otherwise
-    pub fn unpin_page(&mut self, page_id: PageId, is_dirty: bool, access_type: AccessType) -> bool {
-        unimplemented!()
+    pub fn unpin_page(&mut self, page_id: PageId, is_dirty: bool) -> bool {
     }
 
     /// TODO(P1): Add implementation
@@ -203,8 +201,7 @@ impl BufferPoolManager {
     /// @param page_id id of page to be deleted
     /// @return false if the page exists but could not be deleted, true if the
     /// page didn't exist or deletion succeeded
-    pub fn delete_page(&mut self, page_id: bool) {
-        unimplemented!()
+    pub fn delete_page(&mut self, page_id: PageId) -> bool {
     }
 
     /// @brief Allocate a page on disk. Caller should acquire the latch before
@@ -218,7 +215,6 @@ impl BufferPoolManager {
     fn deallocate_page(&self, page_id: PageId) {
         // This is a no-nop right now without a more complex data structure to
         // track deallocated pages
-        unimplemented!()
     }
 
     // TODO(student): You may add additional private members and helper functions
@@ -226,40 +222,37 @@ impl BufferPoolManager {
 
 mod tests {
     use std::fs;
-    use std::fs::remove_file;
-    use std::sync::Arc;
 
-    use rand::distributions::Uniform;
-    use rand::Rng;
+    use rand::distributions::{Distribution, Uniform};
+    use tempdir::TempDir;
 
     use super::*;
     use crate::buffer::buffer_pool_manager::BufferPoolManager;
-    use crate::storage::disk_manager::DiskManager;
+    use crate::storage::disk::DiskManager;
 
     const BUSTUB_PAGE_SIZE: usize = 4096; // Placeholder for actual page size
 
     #[test]
     fn test_buffer_pool_manager_binary_data() {
-        let db_name = TempDir::new("test.db");
+        let dir = TempDir::new("test").unwrap();
+        let db_name = dir.path().join("test.db");
         let buffer_pool_size = 10;
         let k = 5;
 
         let mut rng = rand::thread_rng();
-        let uniform_dist = Uniform::from(std::i8::MIN..=std::i8::MAX);
+        let uniform_dist = Uniform::from(std::u8::MIN..=std::u8::MAX);
 
-        let disk_manager = DiskManager::new(db_name);
-        let mut bpm = BufferPoolManager::new(buffer_pool_size, disk_manager, k, None);
+        let disk_manager = DiskManager::new(db_name.to_str().unwrap());
+        let mut bpm = BufferPoolManager::new(buffer_pool_size, disk_manager, k);
 
-        let mut page_id_temp: PageId = 0; // PageId should be the type your system uses for page IDs
-        let page0 = bpm.new_page(&mut page_id_temp);
+        let page0 = bpm.new_page();
 
         // Scenario: The buffer pool is empty. We should be able to create a new page.
         assert!(page0.is_some());
-        assert_eq!(0, page_id_temp);
 
         // Generate random binary data
         let mut random_binary_data: Vec<u8> = (0..BUSTUB_PAGE_SIZE)
-            .map(|_| uniform_dist.sample(&mut rng) as u8)
+            .map(|_| uniform_dist.sample(&mut rng))
             .collect();
 
         // Insert terminal characters both in the middle and at end
@@ -267,20 +260,23 @@ mod tests {
         random_binary_data[BUSTUB_PAGE_SIZE - 1] = 0;
 
         // Scenario: Once we have a page, we should be able to read and write content.
-        let page0 = page0.unwrap(); // Unwrap to use the page
-        page0.set_data(&random_binary_data); // Replace with actual method to write data to a page
-        assert_eq!(page0.get_data(), &random_binary_data); // Replace with actual method to read data from a page
+        let page0 = page0.unwrap();
+        page0.get_mut_data()[..random_binary_data.len()].copy_from_slice(&random_binary_data);
+        assert_eq!(
+            random_binary_data,
+            page0.get_data()[..random_binary_data.len()]
+        );
 
         // Scenario: We should be able to create new pages until we fill up the buffer
         // pool.
         for _i in 1..buffer_pool_size {
-            assert!(bpm.new_page(&mut page_id_temp).is_some());
+            assert!(bpm.new_page().is_some());
         }
 
         // Scenario: Once the buffer pool is full, we should not be able to create any
         // new pages.
         for _i in buffer_pool_size..buffer_pool_size * 2 {
-            assert!(bpm.new_page(&mut page_id_temp).is_none());
+            assert!(bpm.new_page().is_none());
         }
 
         // Scenario: After unpinning pages {0, 1, 2, 3, 4}, we should be able to create
@@ -290,86 +286,80 @@ mod tests {
             bpm.flush_page(i);
         }
         for _i in 0..5 {
-            assert!(bpm.new_page(&mut page_id_temp).is_some());
-            bpm.unpin_page(page_id_temp, false); // Unpin the page here to allow future fetching
+            let page = bpm.new_page();
+            assert!(page.is_some());
+            // Unpin the page here to allow future fetching
+            bpm.unpin_page(page.unwrap().get_page_id().unwrap(), false);
         }
 
         // Scenario: We should be able to fetch the data we wrote a while ago.
         let page0 = bpm.fetch_page(0);
         assert!(page0.is_some());
         let page0 = page0.unwrap();
-        assert_eq!(page0.get_data(), &random_binary_data);
+        assert_eq!(*page0.get_data(), random_binary_data.as_slice());
         assert!(bpm.unpin_page(0, true));
 
         // Shutdown the disk manager and remove the temporary file we created.
-        disk_manager.shutdown(); // Replace with actual shutdown method
-        fs::remove_file("test.db").expect("Failed to remove test file");
+        drop(bpm);
     }
 
     #[test]
     fn test_buffer_pool_manager_sample() {
-        let db_name = TempDir::new("test.db");
+        let dir = TempDir::new("test.db").unwrap();
+        let db_name = dir.path().join("test.db");
         let buffer_pool_size = 10;
         let k = 5;
 
-        let disk_manager = Box::new(DiskManager::new(db_name));
-        let mut bpm = Box::new(BufferPoolManager::new(
-            buffer_pool_size,
-            Arc::new(disk_manager),
-            k,
-            None,
-        ));
+        let disk_manager = DiskManager::new(db_name.to_str().unwrap());
+        let mut bpm = BufferPoolManager::new(buffer_pool_size, disk_manager, k);
 
-        let mut page_id_temp = 0;
-        let page0 = bpm.new_page(&mut page_id_temp);
+        let page0 = bpm.new_page();
 
         // Scenario: The buffer pool is empty. We should be able to create a new page.
         assert!(page0.is_some());
-        assert_eq!(0, page_id_temp);
+        assert_eq!(0, page0.as_ref().unwrap().get_page_id().unwrap());
 
         // Scenario: Once we have a page, we should be able to read and write content.
-        let mut page0 = page0.unwrap(); // Unwrap to use the page, handle None case as needed
-        page0.set_data("Hello".as_bytes()); // Replace with actual method to write data to a page
-        assert_eq!("Hello".as_bytes(), page0.get_data()); // Replace with actual method to read data from a page
+        let page0 = page0.unwrap();
+        let data = "Hello".as_bytes();
+        page0.get_mut_data()[..data.len()].copy_from_slice(data);
+        assert_eq!(data, &(page0.get_data())[..data.len()]);
 
         // Scenario: We should be able to create new pages until we fill up the buffer
         // pool.
         for i in 1..buffer_pool_size {
-            assert!(bpm.new_page(&mut page_id_temp).is_some());
+            assert!(bpm.new_page().is_some());
         }
 
         // Scenario: Once the buffer pool is full, we should not be able to create any
         // new pages.
         for _i in buffer_pool_size..buffer_pool_size * 2 {
-            assert!(bpm.new_page(&mut page_id_temp).is_none());
+            assert!(bpm.new_page().is_none());
         }
 
         // Scenario: After unpinning pages {0, 1, 2, 3, 4} and pinning another 4 new
         // pages, there would still be one buffer page left for reading page 0.
         for i in 0..5 {
-            assert_eq!(true, bpm.unpin_page(i as PageId, true)); // Assuming PageId is the type for page ids
+            assert_eq!(true, bpm.unpin_page(i as PageId, true));
         }
         for _i in 0..4 {
-            assert!(bpm.new_page(&mut page_id_temp).is_some());
+            assert!(bpm.new_page().is_some());
         }
 
         // Scenario: We should be able to fetch the data we wrote a while ago.
-        let page0 = bpm.fetch_page(0); // Assuming fetch_page takes a PageId and returns an Option<Page>
+        let page0 = bpm.fetch_page(0);
         assert!(page0.is_some());
         let page0 = page0.unwrap();
-        assert_eq!("Hello".as_bytes(), page0.get_data());
+        assert_eq!(data, &(page0.get_data())[..data.len()]);
 
         // Scenario: If we unpin page 0 and then make a new page, all the buffer pages
         // should now be pinned. Fetching page 0 again should fail.
         assert_eq!(true, bpm.unpin_page(0, true));
-        assert!(bpm.new_page(&mut page_id_temp).is_some());
+        assert!(bpm.new_page().is_some());
         assert!(bpm.fetch_page(0).is_none());
 
         // Shutdown the disk manager and remove the temporary file we created.
         // Replace this with the actual method to shut down the disk manager.
-        disk_manager.shutdown();
-        std::fs::remove_file("test.db").expect("Failed to remove test file");
-
-        // Implicit drop calls for bpm and disk_manager here
+        drop(bpm);
     }
 }

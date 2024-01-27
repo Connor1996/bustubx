@@ -6,6 +6,7 @@ pub const INVALID_PAGE_ID: PageId = std::u32::MAX;
 pub const TABLE_HEAP_BUFFER_POOL_SIZE: usize = 100;
 pub const LRUK_REPLACER_K: usize = 10; // lookback window for lru-k replacer
 
-pub type FrameId = u32;
-pub type PageId = u32;
-pub type TransactionId = u32;
+pub type FrameId = usize; // frame id type
+pub type PageId = u32; // page id type
+pub type TransactionId = u32; // transaction id type
+pub type Lsn = u64; // log sequence number type
