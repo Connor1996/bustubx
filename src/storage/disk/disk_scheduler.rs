@@ -58,7 +58,7 @@ impl DiskScheduler {
     ///
     /// @param r The request to be scheduled.
     pub fn schedule(&self, r: DiskRequest) {
-        unimplemented!()
+        self.request_queue.send(Some(r)).unwrap();
     }
 
     /// TODO(P1): Add implementation
@@ -74,7 +74,19 @@ impl DiskScheduler {
         rx: std::sync::mpsc::Receiver<Option<DiskRequest>>,
         mut disk_manager: DiskManager,
     ) {
-        unimplemented!()
+        while let Ok(r) = rx.recv() {
+            match r {
+                Some(DiskRequest::Read { page, callback }) => {
+                    disk_manager.read_page(page.get_page_id().unwrap(), &mut *page.get_mut_data());
+                    callback.send(()).unwrap();
+                }
+                Some(DiskRequest::Write { page, callback }) => {
+                    disk_manager.write_page(page.get_page_id().unwrap(), &*page.get_data());
+                    callback.send(()).unwrap();
+                }
+                None => break,
+            }
+        }
     }
 
     /// @brief Create a Promise object. If you want to implement your own

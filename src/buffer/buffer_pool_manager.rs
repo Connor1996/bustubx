@@ -21,7 +21,7 @@ pub struct BufferPoolManager {
     /// Pointer to the disk scheduler.
     disk_scheduler: DiskScheduler,
     /// Pointer to the log manager. Please ignore this for P1.
-    log_manager: Option<Arc<LogManager>>,
+    // log_manager: Option<Arc<LogManager>>,
     /// Page table for keeping track of buffer pool pages.
     page_table: Mutex<HashMap<PageId, FrameId>>,
     /// Replacer to find unpinned pages for replacement.
@@ -41,7 +41,7 @@ impl BufferPoolManager {
         pool_size: usize,
         disk_manager: DiskManager,
         replacer_k: usize,
-        log_manager: Option<Arc<LogManager>>,
+        // log_manager: Option<Arc<LogManager>>,
     ) -> BufferPoolManager {
         let mut free_list = Vec::with_capacity(pool_size);
         for i in (0..pool_size).rev() {
@@ -52,7 +52,7 @@ impl BufferPoolManager {
             next_page_id: AtomicUsize::new(0),
             pages: (0..pool_size).map(|_| Page::new()).collect(),
             disk_scheduler: DiskScheduler::new(disk_manager),
-            log_manager,
+            // log_manager,
             page_table: Mutex::new(HashMap::new()),
             replacer: LRUKReplacer::new(replacer_k, LRUK_REPLACER_K),
             free_list: Mutex::new(free_list),
@@ -89,6 +89,36 @@ impl BufferPoolManager {
     /// @return none if no new pages could be created, otherwise pointer to
     /// new page
     pub fn new_page(&mut self) -> Option<Page> {
+        let frame_id = if let Some(frame_id) = self.free_list.lock().unwrap().pop() {
+            frame_id
+        } else if let Some(frame_id) = self.replacer.evict() {
+            let page = &self.pages[frame_id];
+            if page.is_dirty() {
+                let (tx, rx) = oneshot::channel();
+                self.disk_scheduler.schedule(DiskRequest::Write {
+                    page: page.clone(),
+                    callback: tx,
+                });
+                rx.blocking_recv().unwrap();
+            }
+            self.page_table
+                .lock()
+                .unwrap()
+                .remove(&page.get_page_id().unwrap());
+            frame_id
+        } else {
+            return None;
+        };
+
+        let page_id = self.allocate_page();
+        let page = &self.pages[frame_id];
+        page.set_page_id(page_id);
+        page.pin();
+        self.page_table.lock().unwrap().insert(page_id, frame_id);
+        self.replacer.record_access(frame_id);
+        self.replacer.set_evictable(frame_id, false);
+
+        Some(page.clone())
     }
 
     /// TODO(P2): Add implementation
@@ -126,6 +156,48 @@ impl BufferPoolManager {
     /// @return nullptr if page_id cannot be fetched,
     /// otherwise pointer to the requested page
     pub fn fetch_page(&mut self, page_id: PageId) -> Option<Page> {
+        if let Some(frame_id) = self.page_table.lock().unwrap().get(&page_id) {
+            let page = &self.pages[*frame_id];
+            page.pin();
+            self.replacer.record_access(*frame_id);
+            return Some(page.clone());
+        }
+
+        let frame_id = if let Some(frame_id) = self.free_list.lock().unwrap().pop() {
+            frame_id
+        } else if let Some(frame_id) = self.replacer.evict() {
+            let page = &self.pages[frame_id];
+            if page.is_dirty() {
+                let (tx, rx) = oneshot::channel();
+                self.disk_scheduler.schedule(DiskRequest::Write {
+                    page: page.clone(),
+                    callback: tx,
+                });
+                rx.blocking_recv().unwrap();
+            }
+            self.page_table
+                .lock()
+                .unwrap()
+                .remove(&page.get_page_id().unwrap());
+            frame_id
+        } else {
+            return None;
+        };
+
+        let page = &self.pages[frame_id];
+        page.set_page_id(page_id);
+        page.pin();
+        let (tx, rx) = oneshot::channel();
+        self.disk_scheduler.schedule(DiskRequest::Read {
+            page: page.clone(),
+            callback: tx,
+        });
+        rx.blocking_recv().unwrap();
+        self.page_table.lock().unwrap().insert(page_id, frame_id);
+        self.replacer.record_access(frame_id);
+        self.replacer.set_evictable(frame_id, false);
+
+        Some(page.clone())
     }
 
     /// TODO(P2): Add implementation
@@ -163,6 +235,20 @@ impl BufferPoolManager {
     /// otherwise @return false if the page is not in the page
     /// table or its pin count is <= 0 before this call, true otherwise
     pub fn unpin_page(&mut self, page_id: PageId, is_dirty: bool) -> bool {
+        if let Some(frame_id) = self.page_table.lock().unwrap().get(&page_id) {
+            let page = &self.pages[*frame_id];
+            if page.get_pin_count() <= 0 {
+                return false;
+            }
+            page.set_dirty(is_dirty);
+            page.unpin();
+            if page.get_pin_count() == 0 {
+                self.replacer.set_evictable(*frame_id, true);
+            }
+            true
+        } else {
+            false
+        }
     }
 
     /// TODO(P1): Add implementation
@@ -177,14 +263,34 @@ impl BufferPoolManager {
     /// @return false if the page could not be found in the page table, true
     /// otherwise
     pub fn flush_page(&mut self, page_id: PageId) -> bool {
-        unimplemented!()
+        if let Some(frame_id) = self.page_table.lock().unwrap().get(&page_id) {
+            let page = &self.pages[*frame_id];
+            let (tx, rx) = oneshot::channel();
+            self.disk_scheduler.schedule(DiskRequest::Write {
+                page: page.clone(),
+                callback: tx,
+            });
+            rx.blocking_recv().unwrap();
+            true
+        } else {
+            false
+        }
     }
 
     /// TODO(P1): Add implementation
     ///
     /// @brief Flush all the pages in the buffer pool to disk.
     pub fn flush_all_pages(&mut self) {
-        unimplemented!()
+        for page in self.pages.iter() {
+            if page.is_dirty() {
+                let (tx, rx) = oneshot::channel();
+                self.disk_scheduler.schedule(DiskRequest::Write {
+                    page: page.clone(),
+                    callback: tx,
+                });
+                rx.blocking_recv().unwrap();
+            }
+        }
     }
 
     /// TODO(P1): Add implementation
@@ -202,6 +308,20 @@ impl BufferPoolManager {
     /// @return false if the page exists but could not be deleted, true if the
     /// page didn't exist or deletion succeeded
     pub fn delete_page(&mut self, page_id: PageId) -> bool {
+        if let Some(frame_id) = self.page_table.lock().unwrap().get(&page_id) {
+            let page = &self.pages[*frame_id];
+            if page.get_pin_count() > 0 {
+                return false;
+            }
+            self.page_table.lock().unwrap().remove(&page_id);
+            self.replacer.remove(*frame_id);
+            self.free_list.lock().unwrap().push(*frame_id);
+            page.reset();
+            self.deallocate_page(page_id);
+            true
+        } else {
+            true
+        }
     }
 
     /// @brief Allocate a page on disk. Caller should acquire the latch before
