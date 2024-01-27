@@ -5,9 +5,11 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::oneshot;
 
 use super::lru_k_replacer::LRUKReplacer;
-use crate::common::config::{FrameId, PageId, BUSTUB_PAGE_SIZE, LRUK_REPLACER_K};
-use crate::storage::disk::{DiskManager, DiskRequest, DiskScheduler};
-use crate::storage::page::{BasicPageGuard, Page, ReadPageGuard, WritePageGuard};
+use crate::common::config::{FrameId, PageId, LRUK_REPLACER_K};
+use crate::storage::disk::disk_manager::DiskManager;
+use crate::storage::disk::disk_scheduler::{DiskRequest, DiskScheduler};
+use crate::storage::page::page::Page;
+use crate::storage::page::page_guard::{BasicPageGuard, ReadPageGuard, WritePageGuard};
 
 /// BufferPoolManager reads disk pages to and from its internal buffer pool.
 pub struct BufferPoolManager {
@@ -88,7 +90,7 @@ impl BufferPoolManager {
     ///
     /// @return none if no new pages could be created, otherwise pointer to
     /// new page
-    pub fn new_page(&mut self) -> Option<Page> {
+    pub fn new_page(&self) -> Option<Page> {
         let frame_id = if let Some(frame_id) = self.free_list.lock().unwrap().pop() {
             frame_id
         } else if let Some(frame_id) = self.replacer.evict() {
@@ -129,9 +131,8 @@ impl BufferPoolManager {
     /// instead of returning a pointer to a page, you return a
     /// BasicPageGuard structure.
     ///
-    /// @param[out] page_id, the id of the new page
     /// @return BasicPageGuard holding a new page
-    pub fn new_page_guarded(&mut self, page_id: &mut Option<PageId>) -> Option<BasicPageGuard> {
+    pub fn new_page_guarded(self: Arc<Self>) -> Option<BasicPageGuard> {
         unimplemented!()
     }
 
@@ -155,7 +156,7 @@ impl BufferPoolManager {
     /// @param page_id id of page to be fetched
     /// @return nullptr if page_id cannot be fetched,
     /// otherwise pointer to the requested page
-    pub fn fetch_page(&mut self, page_id: PageId) -> Option<Page> {
+    pub fn fetch_page(&self, page_id: PageId) -> Option<Page> {
         if let Some(frame_id) = self.page_table.lock().unwrap().get(&page_id) {
             let page = &self.pages[*frame_id];
             page.pin();
@@ -211,13 +212,13 @@ impl BufferPoolManager {
     ///
     /// @param page_id, the id of the page to fetch
     /// @return PageGuard holding the fetched page
-    pub fn fetch_page_basic(&mut self, page_id: PageId) -> Option<BasicPageGuard> {
+    pub fn fetch_page_basic(self: Arc<Self>, page_id: PageId) -> Option<BasicPageGuard> {
         unimplemented!()
     }
-    pub fn fetch_page_read(&mut self, page_id: PageId) -> Option<ReadPageGuard> {
+    pub fn fetch_page_read(self: Arc<Self>, page_id: PageId) -> Option<ReadPageGuard> {
         unimplemented!()
     }
-    pub fn fetch_page_write(&mut self, page_id: PageId) -> Option<WritePageGuard> {
+    pub fn fetch_page_write(self: Arc<Self>, page_id: PageId) -> Option<WritePageGuard> {
         unimplemented!()
     }
 
@@ -234,7 +235,7 @@ impl BufferPoolManager {
     /// @param is_dirty true if the page should be marked as dirty, false
     /// otherwise @return false if the page is not in the page
     /// table or its pin count is <= 0 before this call, true otherwise
-    pub fn unpin_page(&mut self, page_id: PageId, is_dirty: bool) -> bool {
+    pub fn unpin_page(&self, page_id: PageId, is_dirty: bool) -> bool {
         if let Some(frame_id) = self.page_table.lock().unwrap().get(&page_id) {
             let page = &self.pages[*frame_id];
             if page.get_pin_count() <= 0 {
@@ -262,7 +263,7 @@ impl BufferPoolManager {
     /// @param page_id id of page to be flushed, cannot be INVALID_PAGE_ID
     /// @return false if the page could not be found in the page table, true
     /// otherwise
-    pub fn flush_page(&mut self, page_id: PageId) -> bool {
+    pub fn flush_page(&self, page_id: PageId) -> bool {
         if let Some(frame_id) = self.page_table.lock().unwrap().get(&page_id) {
             let page = &self.pages[*frame_id];
             let (tx, rx) = oneshot::channel();
@@ -307,7 +308,7 @@ impl BufferPoolManager {
     /// @param page_id id of page to be deleted
     /// @return false if the page exists but could not be deleted, true if the
     /// page didn't exist or deletion succeeded
-    pub fn delete_page(&mut self, page_id: PageId) -> bool {
+    pub fn delete_page(&self, page_id: PageId) -> bool {
         if let Some(frame_id) = self.page_table.lock().unwrap().get(&page_id) {
             let page = &self.pages[*frame_id];
             if page.get_pin_count() > 0 {
@@ -341,14 +342,12 @@ impl BufferPoolManager {
 }
 
 mod tests {
-    use std::fs;
-
     use rand::distributions::{Distribution, Uniform};
     use tempdir::TempDir;
 
     use super::*;
     use crate::buffer::buffer_pool_manager::BufferPoolManager;
-    use crate::storage::disk::DiskManager;
+    use crate::storage::disk::disk_manager::DiskManager;
 
     const BUSTUB_PAGE_SIZE: usize = 4096; // Placeholder for actual page size
 
@@ -363,7 +362,7 @@ mod tests {
         let uniform_dist = Uniform::from(std::u8::MIN..=std::u8::MAX);
 
         let disk_manager = DiskManager::new(db_name.to_str().unwrap());
-        let mut bpm = BufferPoolManager::new(buffer_pool_size, disk_manager, k);
+        let bpm = BufferPoolManager::new(buffer_pool_size, disk_manager, k);
 
         let page0 = bpm.new_page();
 
@@ -431,7 +430,7 @@ mod tests {
         let k = 5;
 
         let disk_manager = DiskManager::new(db_name.to_str().unwrap());
-        let mut bpm = BufferPoolManager::new(buffer_pool_size, disk_manager, k);
+        let bpm = BufferPoolManager::new(buffer_pool_size, disk_manager, k);
 
         let page0 = bpm.new_page();
 

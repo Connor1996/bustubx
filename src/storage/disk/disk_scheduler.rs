@@ -2,8 +2,8 @@ use std::thread;
 
 use tokio::sync::oneshot;
 
-use crate::storage::disk::DiskManager;
-use crate::storage::page::Page;
+use crate::storage::disk::disk_manager::DiskManager;
+use crate::storage::page::page::Page;
 
 /// @brief Represents a Write or Read request for the DiskManager to execute.
 pub enum DiskRequest {

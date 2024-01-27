@@ -94,7 +94,7 @@ impl LRUKReplacer {
     /// @param[out] frame_id id of frame that is evicted.
     /// @return true if a frame is evicted successfully, false if no frames can
     /// be evicted.
-    pub fn evict(&mut self) -> Option<FrameId> {
+    pub fn evict(&self) -> Option<FrameId> {
         let mut node_store = self.node_store.lock().unwrap();
         let mut max_frame_id = None;
         let mut max_backward_k_distance = Distance::Num(0);
@@ -124,7 +124,7 @@ impl LRUKReplacer {
     /// If frame id is invalid (ie. larger than replacer_size_), panic.
     ///
     /// @param frame_id id of frame that received a new access.
-    pub fn record_access(&mut self, frame_id: FrameId) {
+    pub fn record_access(&self, frame_id: FrameId) {
         let ts = self.current_timestamp.fetch_add(1, Ordering::SeqCst);
         let mut node_store = self.node_store.lock().unwrap();
         if let Some(node) = node_store.get_mut(&frame_id) {
@@ -160,7 +160,7 @@ impl LRUKReplacer {
     ///
     /// @param frame_id id of frame whose 'evictable' status will be modified
     /// @param set_evictable whether the given frame is evictable or not
-    pub fn set_evictable(&mut self, frame_id: FrameId, set_evictable: bool) {
+    pub fn set_evictable(&self, frame_id: FrameId, set_evictable: bool) {
         let mut node_store = self.node_store.lock().unwrap();
         if let Some(node) = node_store.get_mut(&frame_id) {
             if node.is_evictable == set_evictable {
@@ -192,7 +192,7 @@ impl LRUKReplacer {
     /// If specified frame is not found, directly return from this function.
     ///
     /// @param frame_id id of frame to be removed
-    pub fn remove(&mut self, frame_id: FrameId) {
+    pub fn remove(&self, frame_id: FrameId) {
         let mut node_store = self.node_store.lock().unwrap();
         if let Some(node) = node_store.get_mut(&frame_id) {
             if !node.is_evictable {

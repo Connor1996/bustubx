@@ -1,11 +1,13 @@
 use std::sync::Arc;
 
 use parking_lot::{
-    MappedMutexGuard, MappedRwLockReadGuard, MappedRwLockWriteGuard, MutexGuard, RwLock,
-    RwLockReadGuard, RwLockWriteGuard,
+    MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock, RwLockReadGuard, RwLockWriteGuard,
 };
 
 use crate::common::config::{Lsn, PageId, BUSTUB_PAGE_SIZE};
+
+pub type RefPageData<'a> = MappedRwLockReadGuard<'a, [u8; BUSTUB_PAGE_SIZE]>;
+pub type MutRefPageData<'a> = MappedRwLockWriteGuard<'a, [u8; BUSTUB_PAGE_SIZE]>;
 
 const SIZE_PAGE_HEADER: usize = 8;
 const OFFSET_PAGE_START: usize = 0;
@@ -54,10 +56,10 @@ impl Page {
     }
 
     /// @return the actual data contained within this page
-    pub fn get_data(&self) -> MappedRwLockReadGuard<'_, [u8; BUSTUB_PAGE_SIZE]> {
+    pub fn get_data(&self) -> RefPageData {
         RwLockReadGuard::map(self.0.read(), |i| &i.data)
     }
-    pub fn get_data_mut(&self) -> MappedRwLockWriteGuard<'_, [u8; BUSTUB_PAGE_SIZE]> {
+    pub fn get_data_mut(&self) -> MutRefPageData {
         RwLockWriteGuard::map(self.0.write(), |i| &mut i.data)
     }
 
