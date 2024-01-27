@@ -381,7 +381,7 @@ mod tests {
 
         // Scenario: Once we have a page, we should be able to read and write content.
         let page0 = page0.unwrap();
-        page0.get_mut_data()[..random_binary_data.len()].copy_from_slice(&random_binary_data);
+        page0.get_data_mut()[..random_binary_data.len()].copy_from_slice(&random_binary_data);
         assert_eq!(
             random_binary_data,
             page0.get_data()[..random_binary_data.len()]
@@ -442,7 +442,7 @@ mod tests {
         // Scenario: Once we have a page, we should be able to read and write content.
         let page0 = page0.unwrap();
         let data = "Hello".as_bytes();
-        page0.get_mut_data()[..data.len()].copy_from_slice(data);
+        page0.get_data_mut()[..data.len()].copy_from_slice(data);
         assert_eq!(data, &(page0.get_data())[..data.len()]);
 
         // Scenario: We should be able to create new pages until we fill up the buffer

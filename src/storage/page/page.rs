@@ -57,7 +57,7 @@ impl Page {
     pub fn get_data(&self) -> MappedRwLockReadGuard<'_, [u8; BUSTUB_PAGE_SIZE]> {
         RwLockReadGuard::map(self.0.read(), |i| &i.data)
     }
-    pub fn get_mut_data(&self) -> MappedRwLockWriteGuard<'_, [u8; BUSTUB_PAGE_SIZE]> {
+    pub fn get_data_mut(&self) -> MappedRwLockWriteGuard<'_, [u8; BUSTUB_PAGE_SIZE]> {
         RwLockWriteGuard::map(self.0.write(), |i| &mut i.data)
     }
 

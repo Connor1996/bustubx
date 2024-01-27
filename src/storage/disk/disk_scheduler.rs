@@ -77,7 +77,7 @@ impl DiskScheduler {
         while let Ok(r) = rx.recv() {
             match r {
                 Some(DiskRequest::Read { page, callback }) => {
-                    disk_manager.read_page(page.get_page_id().unwrap(), &mut *page.get_mut_data());
+                    disk_manager.read_page(page.get_page_id().unwrap(), &mut *page.get_data_mut());
                     callback.send(()).unwrap();
                 }
                 Some(DiskRequest::Write { page, callback }) => {
